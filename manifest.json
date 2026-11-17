@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "X センシティブ非表示",
+  "version": "1.1.0",
+  "minimum_chrome_version": "116",
+  "description": "Xのポスト・リプの本文、タグ、警告、画像を判定し、対象の投稿者を端末に保存して非表示にします。",
+  "permissions": ["storage", "offscreen"],
+  "host_permissions": ["https://pbs.twimg.com/*"],
+  "background": {"service_worker": "worker.js"},
+  "action": {"default_popup": "popup.html"},
+  "content_scripts": [{
+    "matches": ["https://x.com/*", "https://twitter.com/*", "https://www.x.com/*", "https://www.twitter.com/*"],
+    "js": ["rules.js", "content.js"],
+    "css": ["content.css"],
+    "run_at": "document_start"
+  }]
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>X センシティブ非表示</title>
+<link rel="stylesheet" href="popup.css">
+<script src="rules.js" defer></script>
+<script src="popup.js" defer></script>
+</head>
+<body>
+<h1>X センシティブ非表示</h1>
+<section>
+  <label class="toggle"><input type="checkbox" id="enabled"> 自動検出と非表示を有効にする</label>
+  <label class="toggle"><input type="checkbox" id="images"> 投稿画像と動画のサムネイルも判定する</label>
+</section>
+<form id="keywords">
+  <label for="terms">追加キーワード・#タグ</label>
+  <textarea id="terms" disabled rows="3" placeholder="#任意のタグ&#10;任意のキーワード"></textarea>
+  <button id="save-terms" disabled>キーワードを保存</button>
+</form>
+<section>
+  <h2>非表示アカウント <span id="count">0</span></h2>
+  <form id="manual">
+    <input id="handle" aria-label="アカウント名" placeholder="@ユーザー名" required>
+    <button>非表示に追加</button>
+  </form>
+  <ul id="blocked"></ul>
+</section>
+<details>
+  <summary>自動検出から除外したアカウント</summary>
+  <ul id="allowed"></ul>
+</details>
+<p id="status" role="status"></p>
+</body>
+</html>
