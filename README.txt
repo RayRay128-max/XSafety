@@ -50,4 +50,3 @@ Chromeプロファイルに保存されます。画像の取得先はXの画像�
 NSFWJS MobileNetV2 (MIT) https://github.com/infinitered/nsfwjs
 TensorFlow.js (Apache-2.0) https://github.com/tensorflow/tfjs
 ライセンスの詳細は licenses フォルダーを参照してください。
-
