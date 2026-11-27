@@ -1,4 +1,4 @@
-importScripts('rules.js');
+importScripts('rules.js', 'backup.js');
 
 const OFFSCREEN = 'offscreen.html';
 const LOCAL = chrome.storage.local;
@@ -62,6 +62,22 @@ async function updateAccount(message) {
   return { ok: true };
 }
 
+async function importBackup(data) {
+  const incoming = parseBackup(data);
+  const stored = await LOCAL.get(null);
+  const terms = [...new Set([...termsOf(stored.terms), ...incoming.keywords])];
+  const updates = { terms: terms.join('\n') };
+  let count = 0;
+  for (const [handle, account] of incoming.accounts) {
+    const key = 'account:' + handle;
+    if (stored[key]) continue;
+    updates[key] = account;
+    count++;
+  }
+  await LOCAL.set(updates);
+  return { ok: true, accounts: count, keywords: terms.length - new Set(termsOf(stored.terms)).size };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.id !== chrome.runtime.id) return;
   let fromX = false;
@@ -79,10 +95,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     return true;
   }
   if ((fromX && message?.type === 'detect') ||
-      (fromPopup && ['add', 'allow'].includes(message?.type))) {
-    const job = mutations.then(() => updateAccount(message));
+      (fromPopup && ['add', 'allow', 'import'].includes(message?.type))) {
+    const job = mutations.then(() => message.type === 'import' ? importBackup(message.data) : updateAccount(message));
     mutations = job.catch(() => {});
-    job.then(reply, () => reply({ ok: false }));
+    job.then(reply, error => reply({ ok: false, error: error.message }));
     return true;
   }
 });

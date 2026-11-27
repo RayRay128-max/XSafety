@@ -90,3 +90,43 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && Object.keys(changes).some(key => key.startsWith('account:'))) void refresh().catch(() => { status.textContent = '拡張機能を再読み込みして開き直してください。'; });
 });
 void refresh().catch(() => { status.textContent = '拡張機能を再読み込みして開き直してください。'; });
+
+byId('export-data').addEventListener('click', async () => {
+  try {
+    const data = exportBackup(await chrome.storage.local.get(null));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'XSafety-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    status.textContent = '保存ファイルのダウンロードを開始しました。';
+  } catch {
+    status.textContent = 'ファイルを保存できませんでした。';
+  }
+});
+byId('import-data').addEventListener('click', () => byId('backup-file').click());
+byId('backup-file').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  byId('import-data').disabled = true;
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('5MB以下の保存ファイルを選んでください。');
+    const data = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
+    parseBackup(data);
+    const result = await chrome.runtime.sendMessage({ type: 'import', data });
+    if (!result?.ok) throw new Error(result?.error || '読み込みを保存できませんでした。');
+    const settings = await chrome.storage.local.get(SETTINGS);
+    byId('terms').value = settings.terms;
+    await refresh();
+    status.textContent = 'キーワード ' + result.keywords + ' 件、アカウント ' + result.accounts + ' 件を追加しました。';
+  } catch (error) {
+    status.textContent = error instanceof SyntaxError ? 'JSONファイルの内容を確認してください。' : error.message;
+  } finally {
+    event.target.value = '';
+    byId('import-data').disabled = false;
+  }
+});

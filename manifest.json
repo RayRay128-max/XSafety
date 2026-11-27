@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Xセフティ",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "minimum_chrome_version": "116",
   "description": "Xのポスト・リプの本文、タグ、警告、画像を判定し、対象の投稿者を端末に保存して非表示にします。",
   "permissions": ["storage", "offscreen"],

@@ -5,6 +5,7 @@
 <title>Xセフティ</title>
 <link rel="stylesheet" href="popup.css">
 <script src="rules.js" defer></script>
+<script src="backup.js" defer></script>
 <script src="popup.js" defer></script>
 </head>
 <body>
@@ -30,6 +31,13 @@
   <summary>自動検出から除外したアカウント</summary>
   <ul id="allowed"></ul>
 </details>
+<section>
+  <h2>登録データの保存・読み込み</h2>
+  <button id="export-data" type="button">ファイルに保存</button>
+  <button id="import-data" type="button">ファイルを読み込む</button>
+  <input id="backup-file" type="file" accept=".json,application/json" hidden>
+  <p>キーワードと @ユーザー名、除外状態を保存します。読み込みは追加方式です。同じユーザー名は現在の設定を優先します。</p>
+</section>
 <p id="status" role="status"></p>
 </body>
 </html>
