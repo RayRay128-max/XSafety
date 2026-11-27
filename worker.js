@@ -34,7 +34,7 @@ function inspectImage(source) {
       return { sensitive: imageIsSensitive(result.scores) };
     } catch {
       imageCache.delete(source);
-      return {};
+      return { retry: true };
     } finally {
       activeImages--;
     }

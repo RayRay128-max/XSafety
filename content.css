@@ -1,2 +1,2 @@
-article.xsh-hidden { display: none !important; }
+[data-testid="tweet"].xsh-hidden, article.xsh-hidden { display: none !important; }
 .xsh-checking { visibility: hidden !important; }

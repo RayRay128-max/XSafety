@@ -1,4 +1,4 @@
-const POST = 'article[data-testid="tweet"], [role="article"][data-testid="tweet"], article[role="article"]';
+const POST = '[data-testid="tweet"], article[role="article"]';
 const NAME = '[data-testid="User-Name"]';
 const PHOTO = '[data-testid="tweetPhoto"] img, [data-testid="videoComponent"] img, [data-testid="videoComponent"] video[poster]';
 const QUOTE = '[data-testid="quoteTweet"]';
@@ -32,6 +32,7 @@ async function send(message) {
 
 function stop() {
   stopped = true;
+  clearInterval(reconcile);
   observer.disconnect();
   visibility?.disconnect();
   clearTimeout(frame);
@@ -53,6 +54,7 @@ function track(post) {
 const pending = new Set();
 const hidden = new Set();
 const imageResults = new Map();
+const imageFailures = new Map();
 let settings;
 let frame;
 let inFlight = 0;
@@ -114,15 +116,30 @@ function register(post, handle, reason) {
 
 function inspectMedia(post, handle, media, source) {
   const cached = imageResults.get(source);
-  media.classList.toggle('xsh-checking', cached === 'pending' || (cached === undefined));
-  if (cached === true) register(post, handle, 'image');
+  media.classList.toggle('xsh-checking', cached === 'pending' || cached === undefined);
+  if (cached === true && settings.enabled && settings.images && !accounts.get(handle)?.allowed) {
+    applyHidden(post, true);
+    register(post, handle, 'image');
+  }
   if (cached !== undefined || inFlight >= 1) return;
   inFlight++;
   imageResults.set(source, 'pending');
   send({ type: 'image', source }).then(result => {
-    if (result?.retry) setTimeout(() => { imageResults.delete(source); visiblePosts.forEach(post => dirtyPosts.add(post)); schedule(); }, 1000);
-    else imageResults.set(source, result?.sensitive === true);
-  }).catch(() => imageResults.set(source, false)).finally(() => {
+    if (typeof result?.sensitive === 'boolean') {
+      imageResults.set(source, result.sensitive);
+      imageFailures.delete(source);
+      return;
+    }
+    // A failed fetch or unavailable classifier must never become a safe verdict.
+    imageResults.set(source, 'unavailable');
+    const failures = (imageFailures.get(source) || 0) + 1;
+    imageFailures.set(source, failures);
+    if (failures <= 3 && !stopped) setTimeout(() => {
+      imageResults.delete(source);
+      visiblePosts.forEach(post => dirtyPosts.add(post));
+      schedule();
+    }, result?.retry ? 1000 : failures * 2000);
+  }).finally(() => {
     inFlight--;
     if (imageResults.size > 400) {
       for (const [url, result] of imageResults) {
@@ -237,6 +254,10 @@ const observer = new MutationObserver(records => {
   for (const record of records) {
     const parent = record.target.nodeType === 1 ? record.target : record.target.parentElement;
     const post = parent?.closest(POST);
+    if (record.type === 'attributes' && record.attributeName === 'class') {
+      if (post && hidden.has(post) && !post.classList.contains('xsh-hidden')) track(post);
+      continue;
+    }
     if (post) { checked.delete(post); track(post); }
     for (const node of record.addedNodes) collect(node);
   }
@@ -244,7 +265,7 @@ const observer = new MutationObserver(records => {
 });
 observer.observe(document, {
   subtree: true, childList: true, characterData: true, attributes: true,
-  attributeFilter: ['href', 'src', 'srcset', 'poster', 'aria-label', 'data-testid', 'role'],
+  attributeFilter: ['href', 'src', 'srcset', 'poster', 'aria-label', 'data-testid', 'role', 'class'],
 });
 if (!visibility) addEventListener('scroll', () => {
   for (const post of knownPosts) {
@@ -257,3 +278,18 @@ if (!visibility) addEventListener('scroll', () => {
   schedule();
 }, { passive: true });
 document.addEventListener('load', event => { collect(event.target); schedule(); }, true);
+
+// Recover missed visibility callbacks and DOM replacements without continuous full rescans.
+const reconcile = setInterval(() => {
+  if (stopped) { clearInterval(reconcile); return; }
+  if (document.visibilityState === 'hidden') return;
+  document.querySelectorAll(POST).forEach(post => {
+    if (!knownPosts.has(post)) track(post);
+    const rect = post.getBoundingClientRect();
+    if (rect.bottom < -100 || rect.top > innerHeight + 100) return;
+    visiblePosts.add(post);
+    checked.delete(post);
+    dirtyPosts.add(post);
+  });
+  schedule();
+}, 3000);
