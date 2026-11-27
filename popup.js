@@ -94,11 +94,11 @@ void refresh().catch(() => { status.textContent = '拡張機能を再読み込�
 byId('export-data').addEventListener('click', async () => {
   try {
     const data = exportBackup(await chrome.storage.local.get(null));
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob(['\uFEFF' + backupToText(data)], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'XSafety-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    link.download = 'XSafety-backup-' + new Date().toISOString().slice(0, 10) + '.txt';
     document.body.append(link);
     link.click();
     link.remove();
@@ -115,7 +115,7 @@ byId('backup-file').addEventListener('change', async event => {
   byId('import-data').disabled = true;
   try {
     if (file.size > 5 * 1024 * 1024) throw new Error('5MB以下の保存ファイルを選んでください。');
-    const data = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
+    const data = backupFromText(await file.text());
     parseBackup(data);
     const result = await chrome.runtime.sendMessage({ type: 'import', data });
     if (!result?.ok) throw new Error(result?.error || '読み込みを保存できませんでした。');
@@ -124,7 +124,7 @@ byId('backup-file').addEventListener('change', async event => {
     await refresh();
     status.textContent = 'キーワード ' + result.keywords + ' 件、アカウント ' + result.accounts + ' 件を追加しました。';
   } catch (error) {
-    status.textContent = error instanceof SyntaxError ? 'JSONファイルの内容を確認してください。' : error.message;
+    status.textContent = error instanceof SyntaxError ? '保存ファイルの内容を確認してください。' : error.message;
   } finally {
     event.target.value = '';
     byId('import-data').disabled = false;

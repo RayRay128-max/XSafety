@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>Xセフティ</title>
+<title>XSafety</title>
 <link rel="stylesheet" href="popup.css">
 <script src="rules.js" defer></script>
 <script src="backup.js" defer></script>
 <script src="popup.js" defer></script>
 </head>
 <body>
-<h1>Xセフティ</h1>
+<h1>XSafety</h1>
 <section>
   <label class="toggle"><input type="checkbox" id="enabled"> 自動検出と非表示を有効にする</label>
   <label class="toggle"><input type="checkbox" id="images"> 投稿画像と動画のサムネイルも判定する</label>
@@ -33,9 +33,9 @@
 </details>
 <section>
   <h2>登録データの保存・読み込み</h2>
-  <button id="export-data" type="button">ファイルに保存</button>
-  <button id="import-data" type="button">ファイルを読み込む</button>
-  <input id="backup-file" type="file" accept=".json,application/json" hidden>
+  <button id="export-data" type="button">TXTで保存</button>
+  <button id="import-data" type="button">TXT・JSONを読み込む</button>
+  <input id="backup-file" type="file" accept=".txt,.json,text/plain,application/json" hidden>
   <p>キーワードと @ユーザー名、除外状態を保存します。読み込みは追加方式です。同じユーザー名は現在の設定を優先します。</p>
 </section>
 <p id="status" role="status"></p>
