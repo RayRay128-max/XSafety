@@ -30,7 +30,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       sender.tab) return;
   const source = imageSource(message.source);
   if (!source) return;
-  const job = queue.then(() => classify(source));
+  const job = queue.then(() => new Promise(resolve => setTimeout(resolve, 120))).then(() => classify(source));
   queue = job.catch(() => {});
   job.then(scores => reply({ scores }), () => reply({}));
   return true;

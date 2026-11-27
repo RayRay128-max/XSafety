@@ -8,6 +8,7 @@ const imageCache = new Map();
 let activeImages = 0;
 
 async function ensureOffscreen() {
+  if (creating) return creating;
   const contexts = await chrome.runtime.getContexts({
     contextTypes: ['OFFSCREEN_DOCUMENT'],
     documentUrls: [chrome.runtime.getURL(OFFSCREEN)],
@@ -23,7 +24,7 @@ async function ensureOffscreen() {
 
 function inspectImage(source) {
   if (imageCache.has(source)) return imageCache.get(source);
-  if (activeImages >= 12) return { retry: true };
+  if (activeImages >= 2) return { retry: true };
   activeImages++;
   const job = (async () => {
     try {
@@ -72,7 +73,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (fromX && message?.type === 'image') {
     const source = imageSource(message.source);
     if (!source) return;
-    Promise.resolve(inspectImage(source)).then(reply);
+    LOCAL.get({ enabled: true, images: true }).then(settings =>
+      settings.enabled && settings.images ? inspectImage(source) : {}
+    ).then(reply, () => reply({}));
     return true;
   }
   if ((fromX && message?.type === 'detect') ||

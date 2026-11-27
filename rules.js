@@ -12,7 +12,7 @@ const ADULT_TAG = /^(?:#)?(?:エロ|えろ|アダルト|ヌード|18禁|r_?18(?:
 const WARNING = /(?:センシティブな|センシティブと判断された)(?:内容|メディア|コンテンツ)|性的なコンテンツ|コンテンツの警告[：:]\s*(?:ヌード|性的)|content warning:\s*(?:nudity|sexual)|sensitive (?:content|media)|graphic nudity|adult content/iu;
 
 function normalize(value) {
-  return value.normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/gu, '').replace(/\s+/gu, ' ').toLowerCase();
+  return String(value ?? '').normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/gu, '').replace(/\s+/gu, ' ').toLowerCase();
 }
 
 function handleOf(value) {
@@ -20,7 +20,7 @@ function handleOf(value) {
 }
 
 function termsOf(value) {
-  return value.split(/[\r\n,，、]+/u).map(text => normalize(text).trim()).filter(term => term && term !== '#');
+  return String(value ?? '').split(/[\r\n,，、]+/u).map(text => normalize(text).trim()).filter(term => term && term !== '#');
 }
 
 function reasonFor(body, tags, warning, terms) {
@@ -40,6 +40,7 @@ function imageSource(value) {
     if (url.origin !== 'https://pbs.twimg.com' ||
         !/^\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//.test(url.pathname)) return;
     url.hash = '';
+    url.searchParams.set('name', 'small');
     return url.href;
   } catch {
     return undefined;

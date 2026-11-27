@@ -6,6 +6,50 @@ const BODY = '[data-testid="tweetText"]';
 const STATUS_PATH = /^\/([a-z0-9_]{1,15})\/status\/\d+\/?$/i;
 const accounts = new Map();
 const checked = new WeakMap();
+const dirtyPosts = new Set();
+const knownPosts = new Set();
+const visiblePosts = new Set();
+let stopped = false;
+let revision = 0;
+const visibility = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (entry.isIntersecting) {
+      visiblePosts.add(entry.target);
+      dirtyPosts.add(entry.target);
+    } else visiblePosts.delete(entry.target);
+  }
+  schedule();
+}, { rootMargin: '100px' }) : null;
+
+async function send(message) {
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    if (/context invalidated/i.test(String(error))) stop();
+    return undefined;
+  }
+}
+
+function stop() {
+  stopped = true;
+  observer.disconnect();
+  visibility?.disconnect();
+  clearTimeout(frame);
+  document.querySelectorAll('.xsh-checking').forEach(node => node.classList.remove('xsh-checking'));
+  dirtyPosts.clear();
+  knownPosts.clear();
+  visiblePosts.clear();
+}
+
+function track(post) {
+  if (!knownPosts.has(post)) {
+    knownPosts.add(post);
+    if (visibility) visibility.observe(post);
+    else visiblePosts.add(post);
+  }
+  dirtyPosts.add(post);
+}
+
 const pending = new Set();
 const hidden = new Set();
 const imageResults = new Map();
@@ -60,12 +104,11 @@ function applyHidden(post, shouldHide) {
 function register(post, handle, reason) {
   if (pending.has(handle)) return;
   pending.add(handle);
-  chrome.runtime.sendMessage({ type: 'detect', handle, reason })
+  send({ type: 'detect', handle, reason })
     .then(result => {
       if (!result?.ok) throw new Error('保存できませんでした');
     }).catch(() => {
-      checked.delete(post);
-      setTimeout(schedule, 1500);
+      if (!stopped) setTimeout(() => { dirtyPosts.add(post); schedule(); }, 3000);
     }).finally(() => pending.delete(handle));
 }
 
@@ -73,11 +116,11 @@ function inspectMedia(post, handle, media, source) {
   const cached = imageResults.get(source);
   media.classList.toggle('xsh-checking', cached === 'pending' || (cached === undefined));
   if (cached === true) register(post, handle, 'image');
-  if (cached !== undefined || inFlight >= 4) return;
+  if (cached !== undefined || inFlight >= 1) return;
   inFlight++;
   imageResults.set(source, 'pending');
-  chrome.runtime.sendMessage({ type: 'image', source }).then(result => {
-    if (result?.retry) setTimeout(() => { imageResults.delete(source); schedule(); }, 650);
+  send({ type: 'image', source }).then(result => {
+    if (result?.retry) setTimeout(() => { imageResults.delete(source); visiblePosts.forEach(post => dirtyPosts.add(post)); schedule(); }, 1000);
     else imageResults.set(source, result?.sensitive === true);
   }).catch(() => imageResults.set(source, false)).finally(() => {
     inFlight--;
@@ -87,15 +130,22 @@ function inspectMedia(post, handle, media, source) {
         if (imageResults.size <= 350) break;
       }
     }
+    visiblePosts.forEach(post => dirtyPosts.add(post));
     schedule();
   });
 }
 
 function inspect(post) {
-  const header = headerOf(post);
-  const handle = authorOf(post, header);
+  const previous = checked.get(post);
+  const metadata = previous?.revision === revision ? previous : {
+    header: headerOf(post), revision,
+  };
+  const header = metadata.header;
+  const handle = metadata.handle ?? authorOf(post, header);
+  metadata.handle = handle;
+  checked.set(post, metadata);
   const account = accounts.get(handle);
-  const reason = settings.enabled && !account ? evidenceFor(post, header) : undefined;
+  const reason = settings.enabled && !account ? (metadata.reason ??= evidenceFor(post, header) || '') : undefined;
   applyHidden(post, Boolean(settings.enabled && (reason || (account && !account.allowed))));
   if (!settings.enabled || account || reason || !handle) {
     for (const node of post.querySelectorAll('.xsh-checking')) node.classList.remove('xsh-checking');
@@ -106,9 +156,7 @@ function inspect(post) {
     for (const node of post.querySelectorAll('.xsh-checking')) node.classList.remove('xsh-checking');
   }
   if (!settings.images) return;
-  const rect = post.getBoundingClientRect();
-  if (rect.bottom < -300 || rect.top > innerHeight + 300) return;
-  checked.set(post, { handle });
+  if (!visiblePosts.has(post)) return;
   for (const node of post.querySelectorAll(PHOTO)) {
     if (!owned(post, node, header)) continue;
     const source = imageSource(node.poster || node.currentSrc || node.src);
@@ -119,13 +167,37 @@ function inspect(post) {
 
 function scan() {
   frame = undefined;
-  if (!settings) return;
-  for (const post of hidden) if (!post.isConnected) hidden.delete(post);
-  for (const post of document.querySelectorAll(POST)) inspect(post);
+  if (!settings || stopped) return;
+  for (const post of knownPosts) {
+    if (post.isConnected) continue;
+    visibility?.unobserve(post);
+    knownPosts.delete(post);
+    visiblePosts.delete(post);
+    hidden.delete(post);
+    dirtyPosts.delete(post);
+  }
+  const deadline = performance.now() + 7;
+  for (const post of dirtyPosts) {
+    dirtyPosts.delete(post);
+    if (post.isConnected) inspect(post);
+    if (performance.now() >= deadline) break;
+  }
+  if (dirtyPosts.size) schedule();
 }
 
 function schedule() {
-  if (frame === undefined) frame = requestAnimationFrame(scan);
+  if (!stopped && frame === undefined) frame = setTimeout(scan, 80);
+}
+
+function collect(node) {
+  const element = node.nodeType === 1 ? node : node.parentElement;
+  if (!element) return;
+  const parent = element.closest(POST);
+  if (parent) {
+    checked.delete(parent);
+    track(parent);
+  }
+  for (const post of element.querySelectorAll(POST)) track(post);
 }
 
 function ingest(key, value) {
@@ -140,6 +212,8 @@ function changesReceived(changes) {
     if (Object.hasOwn(SETTINGS, key)) settings[key] = newValue ?? SETTINGS[key];
     ingest(key, newValue);
   }
+  revision++;
+  knownPosts.forEach(post => dirtyPosts.add(post));
   schedule();
 }
 
@@ -155,13 +229,31 @@ chrome.storage.local.get(null).then(data => {
     ingest(key, value);
   }
   startupChanges.forEach(changesReceived);
+  document.querySelectorAll(POST).forEach(track);
+  schedule();
+}).catch(() => stop());
+
+const observer = new MutationObserver(records => {
+  for (const record of records) {
+    const parent = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+    const post = parent?.closest(POST);
+    if (post) { checked.delete(post); track(post); }
+    for (const node of record.addedNodes) collect(node);
+  }
   schedule();
 });
-
-new MutationObserver(schedule).observe(document, {
+observer.observe(document, {
   subtree: true, childList: true, characterData: true, attributes: true,
   attributeFilter: ['href', 'src', 'srcset', 'poster', 'aria-label', 'data-testid', 'role'],
 });
-addEventListener('scroll', schedule, { passive: true });
-addEventListener('resize', schedule);
-document.addEventListener('load', schedule, true);
+if (!visibility) addEventListener('scroll', () => {
+  for (const post of knownPosts) {
+    const rect = post.getBoundingClientRect();
+    if (rect.bottom >= -100 && rect.top <= innerHeight + 100) {
+      visiblePosts.add(post);
+      dirtyPosts.add(post);
+    } else visiblePosts.delete(post);
+  }
+  schedule();
+}, { passive: true });
+document.addEventListener('load', event => { collect(event.target); schedule(); }, true);

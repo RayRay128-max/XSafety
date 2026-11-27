@@ -45,7 +45,7 @@ function renderList(id, entries) {
 async function refresh() {
   const data = await chrome.storage.local.get(null);
   const entries = Object.keys(data).filter(key => key.startsWith('account:'))
-    .map(key => data[key]).sort((a, b) => b.at - a.at);
+    .map(key => data[key]).filter(item => item && handleOf(item.handle)).sort((a, b) => b.at - a.at);
   const blocked = entries.filter(item => !item.allowed);
   byId('count').textContent = blocked.length;
   renderList('blocked', blocked);
@@ -70,7 +70,7 @@ chrome.storage.local.get(SETTINGS).then(settings => {
   byId('terms').value = settings.terms;
   byId('terms').disabled = false;
   byId('save-terms').disabled = false;
-});
+}).catch(() => { status.textContent = '設定を読み込めませんでした。拡張機能を再読み込みしてください。'; });
 byId('keywords').addEventListener('submit', event => {
   event.preventDefault();
   const box = byId('terms');
@@ -87,6 +87,6 @@ byId('manual').addEventListener('submit', async event => {
   if (await accountAction('add', handle)) byId('handle').value = '';
 });
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && Object.keys(changes).some(key => key.startsWith('account:'))) void refresh();
+  if (area === 'local' && Object.keys(changes).some(key => key.startsWith('account:'))) void refresh().catch(() => { status.textContent = '拡張機能を再読み込みして開き直してください。'; });
 });
-void refresh();
+void refresh().catch(() => { status.textContent = '拡張機能を再読み込みして開き直してください。'; });
